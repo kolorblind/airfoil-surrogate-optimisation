@@ -80,7 +80,8 @@ private image and the results cost a few cents per month in storage.
 ## Reproducibility
 
 - The XFOIL campaign is bit-identical between native macOS and the Linux
-  container (ARM and x86): same 80 L/D values, same 2 failures.
+  container (ARM and x86), including the run on Scaleway Serverless Jobs:
+  same 80 L/D values, same 2 failures.
 - The optimisation path differs slightly across platforms, because network
   training depends on the linear algebra library (final best L/D 207 to 209).
 - Ubuntu's XFOIL package is built with floating-point traps enabled: it
