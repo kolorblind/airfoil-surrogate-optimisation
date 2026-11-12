@@ -1,0 +1,11 @@
+.venv/
+resultats/
+__pycache__/
+*.png
+*.csv
+*.bl
+polaire.txt
+test.txt
+arbre*.py
+modele_substitution.py
+.DS_Store
