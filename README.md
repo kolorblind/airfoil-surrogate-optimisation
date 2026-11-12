@@ -1,14 +1,23 @@
-# Airfoil optimisation with a surrogate model
+# Airfoil optimisation with a surrogate model, containerised and run on Scaleway
 
-A complete, containerised simulation workflow: a solver (XFOIL), a design of
-experiments, two surrogate models and an optimisation loop. The problem is
-deliberately small and cheap, so that every prediction can be checked against
-the real solver.
+A small but complete simulation workflow (solver, design of experiments,
+surrogate models, optimisation), packaged as a Docker image, checked to give
+the same results as a native run, and executed as a Scaleway Serverless Job
+with its results written to Scaleway Object Storage.
+
+    Dockerfile ──build──> image ──push──> Container Registry
+                                                 │
+                                   Serverless Job (1 vCPU, 2 GB)
+                                   XFOIL campaign, models, optimisation
+                                                 │
+                                   Object Storage bucket (CSV + figures)
 
 ## The problem
 
 Find the NACA 4-digit airfoil with the best lift-to-drag ratio (L/D), under a
-limited compute budget, as if each solver call took hours.
+limited compute budget, as if each solver call took hours. The problem is
+deliberately small and cheap, so that every prediction can be checked against
+the real solver.
 
 | Parameter        | Range      |
 |------------------|------------|
@@ -31,8 +40,10 @@ Solver: XFOIL, viscous, Re = 10^6.
    (prediction + uncertainty) is maximised by differential evolution, each
    proposal is checked with XFOIL and added to the data. 8 iterations raise
    the best L/D from 146 to about 207.
+5. `envoi_s3.py`: optional upload of the results to an S3-compatible bucket,
+   configured through environment variables only.
 
-## Run it
+## Run it locally
 
 With Docker only:
 
@@ -42,6 +53,29 @@ With Docker only:
 
 Steps: `tout` (all), `test`, `campagne`, `modeles`, `optimisation`, `shell`.
 CSV files and figures are written to `resultats/`.
+
+## Run it on Scaleway
+
+1. Container Registry: create a private namespace in fr-par, then build for
+   amd64 (Serverless Jobs only run amd64 images) and push:
+
+       docker login rg.fr-par.scw.cloud/<namespace> -u nologin
+       docker build --platform linux/amd64 -t rg.fr-par.scw.cloud/<namespace>/profil:latest .
+       docker push rg.fr-par.scw.cloud/<namespace>/profil:latest
+
+2. Object Storage: create a private bucket in fr-par.
+3. IAM: create an application with a single policy, ObjectStorageFullAccess
+   on one project, and generate its API key. The job never uses a personal,
+   organisation-wide key.
+4. Secret Manager: store that key's access key and secret key as two secrets.
+5. Serverless Jobs: create a job from the image, with the environment variable
+   `S3_BUCKET=<bucket>` and the two secrets referenced as `AWS_ACCESS_KEY_ID`
+   and `AWS_SECRET_ACCESS_KEY`. No command is needed: the image runs the full
+   workflow by default.
+6. Run the job: the results appear in the bucket under `run-<date>-<time>/`.
+
+Cost: the run fits in the monthly free allowance of Serverless Jobs; the
+private image and the results cost a few cents per month in storage.
 
 ## Reproducibility
 
@@ -54,10 +88,13 @@ CSV files and figures are written to `resultats/`.
   container disables the traps with a two-line library loaded through
   `LD_PRELOAD` (`docker/nofpe.c`).
 
-## Limitations
+## Limitations and next steps
 
 - XFOIL is a low-fidelity solver (2D, incompressible); the same approach
-  applies to a RANS solver.
+  applies to a RANS solver, where each run would need a multi-core node
+  rather than a single vCPU.
+- The 80 campaign runs are independent and run sequentially here; on an HPC
+  cluster they would map naturally to a Slurm job array.
 - Three parameters end up at their bounds: the optimum lies outside the
   domain, and an 8 % thick airfoil raises structural questions.
 - The exploration weight κ is fixed; decreasing it over the iterations would
